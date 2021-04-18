@@ -57,14 +57,12 @@ run-deploy-tests:
 
 .PHONY: cluster-prepare
 cluster-prepare:
-	$(MAKE) -C third_party/cert-manager deploy
-	$(MAKE) -C third_party/registry deploy
+	$(MAKE) -C charts cert-manager
 	$(MAKE) -C charts vault
 	$(MAKE) -C third_party/datashim deploy
 
 .PHONY: cluster-prepare-wait
 cluster-prepare-wait:
-	$(MAKE) -C third_party/cert-manager deploy-wait
 	$(MAKE) -C third_party/datashim deploy-wait
 
 .PHONY: install
@@ -123,7 +121,9 @@ DOCKER_PUBLIC_NAMES := \
 	katalog-connector \
 	opa-connector \
 	vault-connector
- 
+
+TRAVIS_TAG := $(shell echo "$${GITHUB_REF\#refs/*/}")
+
 define do-docker-retag-and-push-public
 	for name in ${DOCKER_PUBLIC_NAMES}; do \
 		docker tag ${DOCKER_HOSTNAME}/${DOCKER_NAMESPACE}/$$name:${DOCKER_TAGNAME} ${DOCKER_PUBLIC_HOSTNAME}/${DOCKER_PUBLIC_NAMESPACE}/$$name:$1; \
@@ -133,16 +133,18 @@ endef
 
 .PHONY: docker-retag-and-push-public
 docker-retag-and-push-public:
+ifneq (,$(findstring tags,$(GITHUB_REF)))
+	$(call do-docker-retag-and-push-public,$(TRAVIS_TAG))
+else
 	$(call do-docker-retag-and-push-public,latest)
-ifneq (${TRAVIS_TAG},)
-	$(call do-docker-retag-and-push-public,${TRAVIS_TAG})
 endif
 
 .PHONY: helm-push-public
 helm-push-public:
-	DOCKER_HOSTNAME=${DOCKER_PUBLIC_HOSTNAME} DOCKER_NAMESPACE=${DOCKER_PUBLIC_NAMESPACE} make -C modules helm-chart-push
-ifneq (${TRAVIS_TAG},)
+ifneq (,$(findstring tags,$(GITHUB_REF)))
 	DOCKER_HOSTNAME=${DOCKER_PUBLIC_HOSTNAME} DOCKER_NAMESPACE=${DOCKER_PUBLIC_NAMESPACE} DOCKER_TAGNAME=${TRAVIS_TAG} make -C modules helm-chart-push
+else
+	DOCKER_HOSTNAME=${DOCKER_PUBLIC_HOSTNAME} DOCKER_NAMESPACE=${DOCKER_PUBLIC_NAMESPACE} make -C modules helm-chart-push
 endif
 
 .PHONY: save-images
